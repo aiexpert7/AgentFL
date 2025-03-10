@@ -1,0 +1,8 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "federated-learning"
+    static_configs:
+      - targets: ["registration-service:8001", "monitoring-service:8002", "strategy-service:8003", "orchestrator-service:8004"]
