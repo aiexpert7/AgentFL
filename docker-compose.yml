@@ -1,0 +1,151 @@
+version: '3.8'
+
+services:
+  registration-service:
+    build:
+      context: .
+      dockerfile: ./registration-service/Dockerfile
+    container_name: fl-registration-service
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8001
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./data/registration:/data
+    networks:
+      - fl-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  monitoring-service:
+    build:
+      context: .
+      dockerfile: ./monitoring-service/Dockerfile
+    container_name: fl-monitoring-service
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8002
+    ports:
+      - "8002:8002"
+    volumes:
+      - ./data/monitoring:/data
+    networks:
+      - fl-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  strategy-service:
+    build:
+      context: .
+      dockerfile: ./strategy-service/Dockerfile
+    container_name: fl-strategy-service
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8003
+    ports:
+      - "8003:8003"
+    volumes:
+      - ./data/strategy:/data
+    networks:
+      - fl-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  orchestrator-service:
+    build:
+      context: .
+      dockerfile: ./orchestrator-service/Dockerfile
+    container_name: fl-orchestrator-service
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PORT=8004
+      - REGISTRATION_SERVICE_URL=http://registration-service:8001
+      - MONITORING_SERVICE_URL=http://monitoring-service:8002
+      - STRATEGY_SERVICE_URL=http://strategy-service:8003
+      - MIN_CLIENTS=3
+      - MAX_WAITING_TIME=300
+      - TRAINING_ROUNDS=10
+    ports:
+      - "8004:8004"
+    volumes:
+      - ./data/orchestrator:/data
+    networks:
+      - fl-network
+    depends_on:
+      - registration-service
+      - monitoring-service
+      - strategy-service
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8004/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 5s
+
+  api-gateway:
+    image: nginx:alpine
+    container_name: fl-api-gateway
+    ports:
+      - "8000:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    networks:
+      - fl-network
+    depends_on:
+      - registration-service
+      - monitoring-service
+      - strategy-service
+      - orchestrator-service
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: fl-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - fl-network
+    depends_on:
+      - registration-service
+      - monitoring-service
+      - strategy-service
+      - orchestrator-service
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: fl-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_SECURITY_ADMIN_USER=admin
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - grafana-data:/var/lib/grafana
+    networks:
+      - fl-network
+    depends_on:
+      - prometheus
+
+networks:
+  fl-network:
+    driver: bridge
+
+volumes:
+  grafana-data:
+    driver: local
+
